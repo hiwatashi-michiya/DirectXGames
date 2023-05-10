@@ -721,17 +721,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	}
 	
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 	wvpResource->Release();
 	materialResource->Release();
 	vertexResource->Release();
 	graphicsPipelineState->Release();
-	pixelShaderBlob->Release();
-	vertexShaderBlob->Release();
-	rootSignature->Release();
+	signatureBlob->Release();
 	if (errorBlob) {
 		errorBlob->Release();
 	}
-	signatureBlob->Release();
+	rootSignature->Release();
+	pixelShaderBlob->Release();
+	vertexShaderBlob->Release();
 	includeHandler->Release();
 	dxcCompiler->Release();
 	dxcUtils->Release();

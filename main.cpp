@@ -721,11 +721,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	}
 	
-	
-	if (errorBlob) {
-		errorBlob->Release();
-	}
-	signatureBlob->Release();
 	wvpResource->Release();
 	materialResource->Release();
 	vertexResource->Release();
@@ -733,6 +728,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	pixelShaderBlob->Release();
 	vertexShaderBlob->Release();
 	rootSignature->Release();
+	if (errorBlob) {
+		errorBlob->Release();
+	}
+	signatureBlob->Release();
 	includeHandler->Release();
 	dxcCompiler->Release();
 	dxcUtils->Release();

@@ -739,13 +739,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(SUCCEEDED(hr));
 
 	//実際に頂点リソースを作る
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 16 * 16 * 6);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 16 * 16 * 4);
 	//頂点バッファビューを作成する
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 	//リソースの先頭のアドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	//使用するリソースのサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 16 * 16 * 6;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 16 * 16 * 4;
 	//1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -767,7 +767,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			float lat = float(-M_PI / 2.0f + kLatEvery * latIndex);//θ
 			//緯度の方向に分割
 			for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-				uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+				uint32_t start = (latIndex * kSubdivision + lonIndex) * 4;
 				float lon = lonIndex * kLonEvery;//φ
 				float u = float(lonIndex) / float(kSubdivision);
 				float v = 1.0f - float(latIndex) / float(kSubdivision);
@@ -801,35 +801,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				vertexData[start + 2].normal.y = vertexData[start + 2].position.y;
 				vertexData[start + 2].normal.z = vertexData[start + 2].position.z;
 
-				//b
-				vertexData[start + 3].position.x = cosf(lat + kLatEvery) * cosf(lon);
+				//d
+				vertexData[start + 3].position.x = cosf(lat + kLatEvery) * cosf(lon + kLonEvery);
 				vertexData[start + 3].position.y = sinf(lat + kLatEvery);
-				vertexData[start + 3].position.z = cosf(lat + kLatEvery) * sinf(lon);
+				vertexData[start + 3].position.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
 				vertexData[start + 3].position.w = 1.0f;
-				vertexData[start + 3].texcoord = { u,v - 1.0f / float(kSubdivision) };
+				vertexData[start + 3].texcoord = { u + 1.0f / float(kSubdivision),v - 1.0f / float(kSubdivision) };
 				vertexData[start + 3].normal.x = vertexData[start + 3].position.x;
 				vertexData[start + 3].normal.y = vertexData[start + 3].position.y;
 				vertexData[start + 3].normal.z = vertexData[start + 3].position.z;
-
-				//d
-				vertexData[start + 4].position.x = cosf(lat + kLatEvery) * cosf(lon + kLonEvery);
-				vertexData[start + 4].position.y = sinf(lat + kLatEvery);
-				vertexData[start + 4].position.z = cosf(lat + kLatEvery) * sinf(lon + kLonEvery);
-				vertexData[start + 4].position.w = 1.0f;
-				vertexData[start + 4].texcoord = { u + 1.0f / float(kSubdivision),v - 1.0f / float(kSubdivision) };
-				vertexData[start + 4].normal.x = vertexData[start + 4].position.x;
-				vertexData[start + 4].normal.y = vertexData[start + 4].position.y;
-				vertexData[start + 4].normal.z = vertexData[start + 4].position.z;
-
-				//c
-				vertexData[start + 5].position.x = cosf(lat) * cosf(lon + kLonEvery);
-				vertexData[start + 5].position.y = sinf(lat);
-				vertexData[start + 5].position.z = cosf(lat) * sinf(lon + kLonEvery);
-				vertexData[start + 5].position.w = 1.0f;
-				vertexData[start + 5].texcoord = { u + 1.0f / float(kSubdivision),v };
-				vertexData[start + 5].normal.x = vertexData[start + 5].position.x;
-				vertexData[start + 5].normal.y = vertexData[start + 5].position.y;
-				vertexData[start + 5].normal.z = vertexData[start + 5].position.z;
 
 			}
 		}
@@ -837,19 +817,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	}
 
 	//Sprite用の頂点リソースを作る
-	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
+	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 4);
 	//頂点バッファビューを作成する
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
 	//リソースの先頭のアドレスから使う
 	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
-	//使用するリソースのサイズは頂点6つ分のサイズ
-	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
+	//使用するリソースのサイズは頂点4つ分のサイズ
+	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 4;
 	//1頂点当たりのサイズ
 	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
 	VertexData* vertexDataSprite = nullptr;
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
-	//1枚目の三角形
+	
 	vertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f };//左下
 	vertexDataSprite[0].texcoord = { 0.0f,1.0f };
 	vertexDataSprite[0].normal = { 0.0f,0.0f,-1.0f };
@@ -859,16 +839,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f };//右下
 	vertexDataSprite[2].texcoord = { 1.0f,1.0f };
 	vertexDataSprite[2].normal = { 0.0f,0.0f,-1.0f };
-	//2枚目の三角形
-	vertexDataSprite[3].position = { 0.0f,0.0f,0.0f,1.0f };//左上
-	vertexDataSprite[3].texcoord = { 0.0f,0.0f };
+	vertexDataSprite[3].position = { 640.0f,0.0f,0.0f,1.0f };//右上
+	vertexDataSprite[3].texcoord = { 1.0f,0.0f };
 	vertexDataSprite[3].normal = { 0.0f,0.0f,-1.0f };
-	vertexDataSprite[4].position = { 640.0f,0.0f,0.0f,1.0f };//右上
-	vertexDataSprite[4].texcoord = { 1.0f,0.0f };
-	vertexDataSprite[4].normal = { 0.0f,0.0f,-1.0f };
-	vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };//右下
-	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
-	vertexDataSprite[5].normal = { 0.0f,0.0f,-1.0f };
 
 	//Sprite用のTransformationMatrix用のリソースを作る
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
@@ -881,6 +854,57 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	transformationMatrixDataSprite->World = MakeIdentity4x4();
 	//CPUで動かす用のTransformを作る
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+
+	//Index用リソース
+	ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
+
+	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
+
+	//リソースの先頭のアドレスから使う
+	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
+	//使用するリソースのサイズはインデックス6つ分
+	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
+	//インデックスはuint32_tとする
+	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
+
+	//インデックスリソースにデータを書き込む
+	uint32_t* indexDataSprite = nullptr;
+	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
+	indexDataSprite[0] = 0; indexDataSprite[1] = 1; indexDataSprite[2] = 2;
+	indexDataSprite[3] = 1; indexDataSprite[4] = 3; indexDataSprite[5] = 2;
+
+	//球のIndexリソース
+	ID3D12Resource* indexResource = CreateBufferResource(device, sizeof(uint32_t) * 16 * 16 * 6);
+
+	D3D12_INDEX_BUFFER_VIEW indexBufferView{};
+	indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
+	indexBufferView.SizeInBytes = sizeof(uint32_t) * 16 * 16 * 6;
+	indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+	//球のインデックスリソースデータ
+	uint32_t* indexData = nullptr;
+	indexResource->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
+	{
+		//分割数
+		const uint32_t kSubdivision = 16;
+
+		//緯度の方向に分割
+		for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+			//緯度の方向に分割
+			for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+				uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+				uint32_t vertexStart = (latIndex * kSubdivision + lonIndex) * 4;
+				indexData[start] = vertexStart;
+				indexData[start + 1] = vertexStart + 1;
+				indexData[start + 2] = vertexStart + 2;
+				indexData[start + 3] = vertexStart + 1;
+				indexData[start + 4] = vertexStart + 3;
+				indexData[start + 5] = vertexStart + 2;
+
+			}
+		}
+
+	}
 
 	//DepthStencilTextureをウィンドウのサイズで作成
 	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
@@ -1104,6 +1128,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState); //PSOを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView); //VBVを設定
+			commandList->IASetIndexBuffer(&indexBufferView); //IBVを設定
 			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えておけば良い
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			//マテリアルCBufferの場所を設定
@@ -1115,9 +1140,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 			//描画(DrawCall/ドローコール)。6頂点で1つのインスタンス。
-			commandList->DrawInstanced(16 * 16 * 6, 1, 0, 0);
+			commandList->DrawIndexedInstanced(16 * 16 * 6, 1, 0, 0, 0);
 			//Spriteの描画。変更が必要なものだけ変更する
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//IBVを設定
+			commandList->IASetIndexBuffer(&indexBufferViewSprite);
 			//マテリアルCBufferの場所を再設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 			//TransformationMatrixCBufferの場所を設定
@@ -1125,7 +1152,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//SRVの設定
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 			//描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 			//実際のcommandListのImGuiの描画コマンドを積む
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 
@@ -1179,6 +1206,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialResource->Release();
 	dsvDescriptorHeap->Release();
 	depthStencilResource->Release();
+	indexResource->Release();
+	indexResourceSprite->Release();
 	transformationMatrixResourceSprite->Release();
 	vertexResourceSprite->Release();
 	vertexResource->Release();

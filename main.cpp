@@ -1039,6 +1039,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange; //Tableの中身の配列を指定
 	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange); //Tableで利用する数
 
+	D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
+	descriptorRangeForInstancing[0].BaseShaderRegister = 0;
+	descriptorRangeForInstancing[0].NumDescriptors = 1;
+	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE; //DescriptorTableを使う
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX; //VertexShaderで使う
+	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing; //Tableの中身の配列を指定
+	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing); //Tableで利用する数
+
 	//平行光源
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV; //CBVを使う
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; //PixelShaderで使う
@@ -1095,6 +1106,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//全ての色要素を書き込む
 	blendDesc.RenderTarget[0].RenderTargetWriteMask =
 		D3D12_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
 
 	//RasterizerStateの設定
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -1104,11 +1122,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
 	//Shaderをコンパイルする
-	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl",
+	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = CompileShader(L"Particle.VS.hlsl",
 		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
-	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl",
+	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = CompileShader(L"Particle.PS.hlsl",
 		L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 
@@ -1329,6 +1347,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	WVP wvpTriangle = MakeWVP(device);
 	WVP wvpTriangle2 = MakeWVP(device);
 
+	//Instancing用のリソース
+	const uint32_t kNumInstance = 10; //インスタンス数
+	
+	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource =
+		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+	//アドレス取得
+	TransformationMatrix* instancingData = nullptr;
+	instancingResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
+	//単位行列を書き込んでおく
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		instancingData[index].WVP = MakeIdentity4x4();
+		instancingData[index].World = MakeIdentity4x4();
+	}
+
 	//ビューポート
 	D3D12_VIEWPORT viewport{};
 	//クライアント領域のサイズと一緒にして画面全体に表示
@@ -1398,6 +1430,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//SRVの生成
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
+	//instancing用のSRVを設定
+	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
+	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	instancingSrvDesc.Buffer.FirstElement = 0;
+	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	instancingSrvDesc.Buffer.NumElements = kNumInstance;
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 3);
+	device->CreateShaderResourceView(instancingResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
+
+	//Instancing用のトランスフォーム
+	Transform transforms[kNumInstance];
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		transforms[index].scale = { 1.0f,1.0f,1.0f };
+		transforms[index].rotate = { 0.0f,0.0f,0.0f };
+		transforms[index].translate = { index * 0.1f,index * 0.1f, index * 0.1f };
+	}
+
 	//描画先のRTVとDSVを設定する
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = GetCPUDescriptorHandle(dsvDescriptorHeap, descriptorSizeDSV, 0);
 
@@ -1405,11 +1459,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	bool useColor = true;
 
 	//各オブジェクト表示フラグ
-	bool showTriangle1 = true;
+	bool showTriangle1 = false;
 	bool showTriangle2 = false;
 	bool showSphere = false;
 	bool showSprite = false;
-	bool showObj = false;
+	bool showObj = true;
 
 	//三角形の色変更用
 	Material* colorTriangle = nullptr;
@@ -1441,6 +1495,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//開発用UIの処理。実際に開発用のUIを出す場合はここをゲーム固有の処理に置き換える
 			ImGui::Begin("Settings");
+
+			if (ImGui::CollapsingHeader("camera")) {
+				ImGui::DragFloat3("rotate", &cameraTransform.rotate.x, 0.01f);
+				ImGui::DragFloat3("translation", &cameraTransform.translate.x, 0.01f);
+			}
 
 			if (showTriangle1) {
 
@@ -1497,9 +1556,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (showObj) {
 
 				if (ImGui::CollapsingHeader("Object")) {
-					ImGui::DragFloat3("translate Object", &transform.translate.x, 0.01f);
-					ImGui::DragFloat3("rotate Object", &transform.rotate.x, 0.01f);
-					ImGui::DragFloat3("scale Object", &transform.scale.x, 0.01f);
+					ImGui::DragFloat3("translate Object", &transforms[0].translate.x, 0.01f);
+					ImGui::DragFloat3("rotate Object", &transforms[0].rotate.x, 0.01f);
+					ImGui::DragFloat3("scale Object", &transforms[0].scale.x, 0.01f);
+					ImGui::ColorEdit4("Color", &materialData->color.x);
 				}
 
 			}
@@ -1522,6 +1582,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Checkbox("Sprite", &showSprite);
 			ImGui::Checkbox("Object", &showObj);
 			ImGui::End();
+
+			for (uint32_t index = 0; index < kNumInstance; ++index) {
+				Matrix4x4 worldMatrix =
+					MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
+				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, worldViewProjectionMatrix);
+				instancingData[index].WVP = worldViewProjectionMatrix;
+				instancingData[index].World = worldMatrix;
+			}
 
 			directionalLightData->direction = Normalize(directionalLightData->direction);
 
@@ -1595,68 +1663,68 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
 			//wvp用のCBufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+			/*commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());*/
 
 			if (showObj) {
 				//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
-				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+				commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 				commandList->IASetVertexBuffers(0, 1, &vertexBufferView); //VBVを設定
 				//マテリアルCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(0, instancingResource->GetGPUVirtualAddress());
 				//描画(DrawCall/ドローコール)。6頂点で1つのインスタンス。
-				commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+				commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
 			}
 
-			if (showTriangle1) {
-				//三角形の描画
-				commandList->IASetVertexBuffers(0, 1, &vbvTriangle);
-				commandList->IASetIndexBuffer(&ibvTriangle);
-				commandList->SetGraphicsRootConstantBufferView(0, materialTriangle->GetGPUVirtualAddress());
-				//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
-				commandList->SetGraphicsRootDescriptorTable(2, useColor ? textureSrvHandleGPU2 : textureSrvHandleGPU);
-				//wvp用のCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(1, wvpTriangle.wvpResource->GetGPUVirtualAddress());
-				commandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
-			}
+			//if (showTriangle1) {
+			//	//三角形の描画
+			//	commandList->IASetVertexBuffers(0, 1, &vbvTriangle);
+			//	commandList->IASetIndexBuffer(&ibvTriangle);
+			//	commandList->SetGraphicsRootConstantBufferView(0, materialTriangle->GetGPUVirtualAddress());
+			//	//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
+			//	commandList->SetGraphicsRootDescriptorTable(2, useColor ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+			//	//wvp用のCBufferの場所を設定
+			//	commandList->SetGraphicsRootConstantBufferView(1, wvpTriangle.wvpResource->GetGPUVirtualAddress());
+			//	commandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
+			//}
 
-			if (showTriangle2) {
-				//三角形の描画
-				commandList->IASetVertexBuffers(0, 1, &vbvTriangle2);
-				commandList->IASetIndexBuffer(&ibvTriangle2);
-				//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
-				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-				commandList->SetGraphicsRootConstantBufferView(0, materialTriangle2->GetGPUVirtualAddress());
-				//wvp用のCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(1, wvpTriangle2.wvpResource->GetGPUVirtualAddress());
-				commandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
-			}
+			//if (showTriangle2) {
+			//	//三角形の描画
+			//	commandList->IASetVertexBuffers(0, 1, &vbvTriangle2);
+			//	commandList->IASetIndexBuffer(&ibvTriangle2);
+			//	//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
+			//	commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			//	commandList->SetGraphicsRootConstantBufferView(0, materialTriangle2->GetGPUVirtualAddress());
+			//	//wvp用のCBufferの場所を設定
+			//	commandList->SetGraphicsRootConstantBufferView(1, wvpTriangle2.wvpResource->GetGPUVirtualAddress());
+			//	commandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
+			//}
 
-			if (showSphere) {
-				//球の描画
-				commandList->IASetVertexBuffers(0, 1, &vbvSphere);
-				commandList->IASetIndexBuffer(&ibvSphere);
-				commandList->SetGraphicsRootConstantBufferView(0, materialSphere->GetGPUVirtualAddress());
-				//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
-				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-				//wvp用のCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(1, wvpSphere.wvpResource->GetGPUVirtualAddress());
-				commandList->DrawIndexedInstanced(16 * 16 * 6, 1, 0, 0, 0);
-			}
-			
-			if (showSprite) {
-				//Spriteの描画。変更が必要なものだけ変更する
-				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-				//IBVを設定
-				commandList->IASetIndexBuffer(&indexBufferViewSprite);
-				//マテリアルCBufferの場所を再設定
-				commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
-				//TransformationMatrixCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-				//SRVの設定
-				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-				//描画
-				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-			}
+			//if (showSphere) {
+			//	//球の描画
+			//	commandList->IASetVertexBuffers(0, 1, &vbvSphere);
+			//	commandList->IASetIndexBuffer(&ibvSphere);
+			//	commandList->SetGraphicsRootConstantBufferView(0, materialSphere->GetGPUVirtualAddress());
+			//	//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
+			//	commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			//	//wvp用のCBufferの場所を設定
+			//	commandList->SetGraphicsRootConstantBufferView(1, wvpSphere.wvpResource->GetGPUVirtualAddress());
+			//	commandList->DrawIndexedInstanced(16 * 16 * 6, 1, 0, 0, 0);
+			//}
+			//
+			//if (showSprite) {
+			//	//Spriteの描画。変更が必要なものだけ変更する
+			//	commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//	//IBVを設定
+			//	commandList->IASetIndexBuffer(&indexBufferViewSprite);
+			//	//マテリアルCBufferの場所を再設定
+			//	commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
+			//	//TransformationMatrixCBufferの場所を設定
+			//	commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//	//SRVの設定
+			//	commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			//	//描画
+			//	commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//}
 			
 			//実際のcommandListのImGuiの描画コマンドを積む
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());

@@ -1586,7 +1586,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			for (uint32_t index = 0; index < kNumInstance; ++index) {
 				Matrix4x4 worldMatrix =
 					MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
-				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, worldViewProjectionMatrix);
+				Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+				Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+				Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(1280.0f) / float(720.0f), 0.1f, 100.0f);
+				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 				instancingData[index].WVP = worldViewProjectionMatrix;
 				instancingData[index].World = worldMatrix;
 			}
@@ -1667,10 +1670,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			if (showObj) {
 				//SRVのdescriptorTableの先頭を設定。2はrootParameter[2]である。
-				commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
+				commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 				commandList->IASetVertexBuffers(0, 1, &vertexBufferView); //VBVを設定
+				commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 				//マテリアルCBufferの場所を設定
-				commandList->SetGraphicsRootConstantBufferView(0, instancingResource->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 				//描画(DrawCall/ドローコール)。6頂点で1つのインスタンス。
 				commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
 			}
